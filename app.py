@@ -8,6 +8,8 @@ import uuid
 app = Flask(__name__)
 CORS(app)
 
+app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB limit
+
 UPLOAD_FOLDER = "uploads"
 OUTPUT_FOLDER = "outputs"
 
@@ -24,19 +26,19 @@ def home():
 def remove_bg():
     try:
         if "image" not in request.files:
-            return jsonify({"error": "No image uploaded"}), 400
+            return jsonify({"error": "No image"}), 400
 
         file = request.files["image"]
 
-        unique_name = str(uuid.uuid4())
-        input_path = os.path.join(UPLOAD_FOLDER, unique_name + ".png")
-        output_path = os.path.join(OUTPUT_FOLDER, unique_name + ".png")
+        unique = str(uuid.uuid4())
+        input_path = f"{UPLOAD_FOLDER}/{unique}.png"
+        output_path = f"{OUTPUT_FOLDER}/{unique}.png"
 
         file.save(input_path)
 
-        input_image = Image.open(input_path).convert("RGBA")
-        output_image = remove(input_image)
-        output_image.save(output_path)
+        img = Image.open(input_path).convert("RGBA")
+        output = remove(img)
+        output.save(output_path)
 
         return send_file(output_path, mimetype="image/png")
 
@@ -44,7 +46,7 @@ def remove_bg():
         return jsonify({"error": str(e)}), 500
 
 
-# 🔑 Render PORT Binding
+# Render PORT binding
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
