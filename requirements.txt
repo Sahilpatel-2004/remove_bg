@@ -1,5 +1,5 @@
 flask
 flask-cors
-rembg
+rembg[cpu]
 pillow
 gunicorn
