@@ -1,4 +1,4 @@
-from flask import Flask, request, send_file
+from flask import Flask, request, send_file, jsonify
 from flask_cors import CORS
 from rembg import remove
 from PIL import Image
@@ -22,22 +22,29 @@ def home():
 
 @app.route("/remove-bg", methods=["POST"])
 def remove_bg():
-    file = request.files["image"]
+    try:
+        if "image" not in request.files:
+            return jsonify({"error": "No image uploaded"}), 400
 
-    unique_name = str(uuid.uuid4())
-    input_path = os.path.join(UPLOAD_FOLDER, unique_name + ".png")
-    output_path = os.path.join(OUTPUT_FOLDER, unique_name + ".png")
+        file = request.files["image"]
 
-    file.save(input_path)
+        unique_name = str(uuid.uuid4())
+        input_path = os.path.join(UPLOAD_FOLDER, unique_name + ".png")
+        output_path = os.path.join(OUTPUT_FOLDER, unique_name + ".png")
 
-    input_image = Image.open(input_path)
-    output_image = remove(input_image)
-    output_image.save(output_path)
+        file.save(input_path)
 
-    return send_file(output_path, mimetype="image/png")
+        input_image = Image.open(input_path).convert("RGBA")
+        output_image = remove(input_image)
+        output_image.save(output_path)
+
+        return send_file(output_path, mimetype="image/png")
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
-# ✅ Render Port Binding Fix
+# 🔑 Render PORT Binding
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
