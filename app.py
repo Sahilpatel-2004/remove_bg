@@ -1,26 +1,22 @@
 from flask import Flask, request, send_file, jsonify
 from flask_cors import CORS
-from rembg import remove
+from rembg import remove, new_session
 from PIL import Image
+import io
 import os
-import uuid
 
 app = Flask(__name__)
 CORS(app)
 
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB limit
 
-UPLOAD_FOLDER = "uploads"
-OUTPUT_FOLDER = "outputs"
-
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-os.makedirs(OUTPUT_FOLDER, exist_ok=True)
-
+# IMPORTANT FIX: Load the "pocket" version of the model (u2netp)
+# This is much smaller and prevents the 502 Out-Of-Memory error on Render
+bg_session = new_session("u2netp")
 
 @app.route("/")
 def home():
     return "Background Remover API Running"
-
 
 @app.route("/remove-bg", methods=["POST"])
 def remove_bg():
@@ -29,24 +25,27 @@ def remove_bg():
             return jsonify({"error": "No image"}), 400
 
         file = request.files["image"]
+        
+        if file.filename == '':
+            return jsonify({"error": "No selected file"}), 400
 
-        unique = str(uuid.uuid4())
-        input_path = f"{UPLOAD_FOLDER}/{unique}.png"
-        output_path = f"{OUTPUT_FOLDER}/{unique}.png"
+        # Read the image directly into memory (NO saving to disk)
+        input_image = Image.open(file.stream).convert("RGBA")
+        
+        # Remove background using the memory-friendly session
+        output_image = remove(input_image, session=bg_session)
+        
+        # Save output image to a memory buffer to send it straight back
+        img_buffer = io.BytesIO()
+        output_image.save(img_buffer, format='PNG')
+        img_buffer.seek(0) # Reset buffer position
 
-        file.save(input_path)
-
-        img = Image.open(input_path).convert("RGBA")
-        output = remove(img)
-        output.save(output_path)
-
-        return send_file(output_path, mimetype="image/png")
+        return send_file(img_buffer, mimetype="image/png")
 
     except Exception as e:
+        print(f"Error Processing Image: {e}")
         return jsonify({"error": str(e)}), 500
 
-
-# Render PORT binding
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
