@@ -1,6 +1,6 @@
 flask
 flask-cors
-rembg[cpu]
-onnxruntime
+rembg
 pillow
 gunicorn
+onnxruntime
