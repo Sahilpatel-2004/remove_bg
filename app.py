@@ -1,9 +1,10 @@
-from flask import Flask, request, send_file, jsonify
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 from rembg import remove, new_session
 from PIL import Image
 import io
 import os
+import uuid
 
 app = Flask(__name__)
 CORS(app)
@@ -12,17 +13,21 @@ CORS(app)
 # CONFIGURATION
 # ==============================
 
-app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB max upload
-
+app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10MB limit
+UPLOAD_FOLDER = "static/outputs"
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
-MAX_IMAGE_SIZE = (1500, 1500)  # Resize large images
+MAX_IMAGE_SIZE = (1500, 1500)
 
-# Load lightweight model (important for Render free plan)
+API_KEY = "YOUR_SECRET_API_KEY"   # Change this
+
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
+# Lightweight model (best for Render free plan)
 bg_session = new_session("u2netp")
 
 
 # ==============================
-# HELPER FUNCTION
+# HELPER
 # ==============================
 
 def allowed_file(filename):
@@ -45,39 +50,43 @@ def home():
 @app.route("/remove-bg", methods=["POST"])
 def remove_bg():
     try:
-        # Check file present
+        # API KEY CHECK
+        client_key = request.headers.get("x-api-key")
+        if client_key != API_KEY:
+            return jsonify({"error": "Unauthorized"}), 401
+
         if "image" not in request.files:
-            return jsonify({"error": "No image file provided"}), 400
+            return jsonify({"error": "No image provided"}), 400
 
         file = request.files["image"]
 
-        # Check empty filename
         if file.filename == "":
             return jsonify({"error": "No selected file"}), 400
 
-        # Validate file type
         if not allowed_file(file.filename):
             return jsonify({"error": "Invalid file type"}), 400
 
-        # Open image in memory
+        # Open image
         input_image = Image.open(file.stream).convert("RGBA")
-
-        # Resize if too large (memory safety)
         input_image.thumbnail(MAX_IMAGE_SIZE)
 
         # Remove background
         output_image = remove(input_image, session=bg_session)
 
-        # Save result to memory buffer
-        img_buffer = io.BytesIO()
-        output_image.save(img_buffer, format="PNG")
-        img_buffer.seek(0)
+        # Generate unique filename
+        filename = f"{uuid.uuid4()}.png"
+        output_path = os.path.join(UPLOAD_FOLDER, filename)
 
-        return send_file(
-            img_buffer,
-            mimetype="image/png",
-            as_attachment=False
-        )
+        # Save file
+        output_image.save(output_path, format="PNG")
+
+        # Generate full public URL
+        image_url = request.host_url + f"static/outputs/{filename}"
+
+        return jsonify({
+            "status": "success",
+            "image_url": image_url
+        })
 
     except Exception as e:
         print("Error:", e)
@@ -85,7 +94,7 @@ def remove_bg():
 
 
 # ==============================
-# RUN SERVER
+# RUN
 # ==============================
 
 if __name__ == "__main__":
